@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>6학년 지리 공부방 - 위도와 경도</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; }
+        #map { width: 100vw; height: 100vh; background: #000; cursor: crosshair; }
+        
+        /* 우측 상단 기본 정보창 */
+        .info-panel {
+            position: absolute; top: 20px; right: 20px;
+            background: rgba(0, 0, 0, 0.85); color: white;
+            padding: 15px 20px; border: 2px solid #fff; border-radius: 12px;
+            z-index: 1000; box-shadow: 0 4px 10px rgba(0,0,0,0.5); min-width: 250px;
+        }
+        .country-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; border-bottom: 1px solid #555; padding-bottom: 10px; }
+        .country-header img { width: 40px; border: 1px solid #ccc; border-radius: 4px; display: none; }
+        .country-header h2 { margin: 0; font-size: 20px; }
+        .continent-badge { background: #00bcd4; color: white; padding: 2px 6px; border-radius: 4px; font-size: 12px; display: none; }
+        
+        .info-panel p { margin: 6px 0; font-size: 15px; font-weight: bold; color: #ccc; }
+        .info-panel span { color: #ffeb3b; }
+        
+        .btn-more {
+            margin-top: 10px; background-color: #ffeb3b; color: #333; border: none;
+            padding: 8px 12px; font-size: 14px; font-weight: bold; border-radius: 6px;
+            cursor: pointer; width: 100%; transition: 0.2s;
+        }
+        .btn-more:hover { background-color: #fbc02d; }
+
+        /* 위도/경도 숫자 디자인 */
+        .grid-label { color: rgba(255,255,255,0.8); font-size: 11px; font-weight: bold; text-shadow: 1px 1px 2px black; }
+        .grid-label-eq { color: #ffeb3b; font-size: 13px; font-weight: bold; text-shadow: 1px 1px 3px black; width: 100px !important; }
+
+        /* 우측 하단 북마크 패널 */
+        .bookmark-panel {
+            position: absolute; bottom: 20px; right: 20px;
+            background: rgba(0, 0, 0, 0.85); color: white;
+            padding: 15px; border: 2px solid #4CAF50; border-radius: 12px;
+            z-index: 1000; width: 250px; max-height: 40vh; overflow-y: auto;
+        }
+        .bookmark-panel h3 { margin: 0 0 10px 0; font-size: 16px; color: #4CAF50; border-bottom: 1px solid #555; padding-bottom: 5px; }
+        .bookmark-list { list-style: none; padding: 0; margin: 0; }
+        .bookmark-item {
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(255, 255, 255, 0.1); margin-bottom: 6px; padding: 6px 10px;
+            border-radius: 6px; font-size: 13px;
+        }
+        .bookmark-item:hover { background: rgba(255, 255, 255, 0.2); }
+        .bookmark-del { color: #ff5252; cursor: pointer; font-weight: bold; font-size: 14px; padding: 0 5px; }
+
+        /* 상세 정보 팝업창 (모달) */
+        #detailModal {
+            display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: white; padding: 25px; border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6); z-index: 2000;
+            width: 380px; text-align: center; border: 6px solid #ffeb3b;
+        }
+        #detailModal img { width: 140px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 10px; }
+        #detailModal h3 { margin: 0 0 15px 0; font-size: 28px; color: #333; }
+        
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: left; margin-bottom: 15px; }
+        .info-item { background: #f9f9f9; padding: 10px; border-radius: 8px; border: 1px solid #eee; }
+        .info-item label { display: block; font-size: 12px; color: #888; margin-bottom: 3px; }
+        .info-item strong { font-size: 15px; color: #333; }
+
+        .btn-naver { background-color: #03cf5d; color: white; border: none; padding: 12px 15px; font-size: 15px; font-weight: bold; border-radius: 8px; cursor: pointer; width: 100%; margin-bottom: 10px; }
+        .close-btn { background-color: #eee; color: #555; border: none; padding: 7px 15px; font-size: 14px; border-radius: 5px; cursor: pointer; }
+        #overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1500; }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <div class="info-panel">
+        <div class="country-header">
+            <img id="mainFlag" src="" alt="국기">
+            <div>
+                <span id="mainContinent" class="continent-badge">대륙</span>
+                <h2 id="countryName">마우스를 움직여보세요!</h2>
+            </div>
+        </div>
+        <p>현재 시각: <span id="localTime">--:--</span></p>
+        <hr style="border: 0; border-top: 1px solid #555; margin: 10px 0;">
+        <p>위도: <span id="latValue">0.0000</span></p>
+        <p>경도: <span id="lngValue">0.0000</span></p>
+        <button class="btn-more" onclick="showDetail()">생활 모습 보기 (K)</button>
+    </div>
+
+    <div class="bookmark-panel">
+        <h3>📍 나의 탐험 기록 (<span id="bookmarkCount">0</span>/10)</h3>
+        <ul id="bookmarkList" class="bookmark-list">
+            <li style="font-size: 12px; color: #888; text-align: center;">지도를 클릭하여 북마크를 추가하세요.</li>
+        </ul>
+    </div>
+
+    <div id="overlay" onclick="closeDetail()"></div>
+    <div id="detailModal">
+        <img id="modalFlag" src="" alt="국기">
+        <h3 id="modalCountryName">나라이름</h3>
+        
+        <div class="info-grid">
+            <div class="info-item"><label>📍 수도</label><strong id="modalCapital"></strong></div>
+            <div class="info-item"><label>🌍 대륙</label><strong id="modalRegion"></strong></div>
+            <div class="info-item"><label>👥 인구</label><strong id="modalPopulation"></strong>명</div>
+            <div class="info-item"><label>🗣️ 주요 언어</label><strong id="modalLang"></strong></div>
+            <div class="info-item"><label>💰 화폐 단위</label><strong id="modalMoney"></strong></div>
+            <div class="info-item"><label>☀️ 대략적 기후</label><strong id="modalClimate"></strong></div>
+        </div>
+
+        <button class="btn-naver" id="naverBtn">네이버 지식백과에서 생활상 더 알아보기</button>
+        <br>
+        <button class="close-btn" onclick="closeDetail()">닫기 (ESC)</button>
+    </div>
+
+    <script>
+        const map = L.map('map', {minZoom: 2, maxZoom: 8}).setView([36.5, 127.5], 4); 
+
+        // 1. 대한민국 공식 Vworld 위성 지도 (배경)
+        L.tileLayer('https://xdworld.vworld.kr/2d/Satellite/service/{z}/{x}/{y}.jpeg', {
+            attribution: 'Map data &copy; 국토교통부 VWORLD'
+        }).addTo(map);
+
+        // 2. 대한민국 공식 Vworld 하이브리드 지도 (국경선, 지명 - 동해, 독도 완벽 표기)
+        L.tileLayer('https://xdworld.vworld.kr/2d/Hybrid/service/{z}/{x}/{y}.png', {
+            zIndex: 10
+        }).addTo(map);
+
+        // 위선과 경선 그리기
+        function drawGrid() {
+            for (let lat = -80; lat <= 80; lat += 20) {
+                let isEq = (lat === 0);
+                L.polyline([[lat, -180], [lat, 180]], {color: isEq ? '#ffeb3b' : 'white', weight: isEq ? 2 : 0.8, opacity: isEq? 0.9 : 0.4, dashArray: isEq? '' : '5, 10'}).addTo(map);
+                L.marker([lat, -175], {icon: L.divIcon({className: isEq ? 'grid-label-eq' : 'grid-label', html: isEq ? '적도(0°)' : lat + '°'})}).addTo(map);
+            }
+            for (let lng = -180; lng <= 180; lng += 20) {
+                let isPm = (lng === 0);
+                L.polyline([[-90, lng], [90, lng]], {color: isPm ? '#ffeb3b' : 'white', weight: isPm ? 2 : 0.8, opacity: isPm? 0.9 : 0.4, dashArray: isPm? '' : '5, 10'}).addTo(map);
+                L.marker([75, lng], {icon: L.divIcon({className: isPm ? 'grid-label-eq' : 'grid-label', html: isPm ? '본초자오선(0°)' : lng + '°'})}).addTo(map);
+            }
+        }
+        drawGrid();
+
+        // 북마크 변수 및 함수
+        let bookmarks = [];
+        
+        function renderBookmarks() {
+            const list = document.getElementById('bookmarkList');
+            document.getElementById('bookmarkCount').innerText = bookmarks.length;
+            list.innerHTML = "";
+            
+            if(bookmarks.length === 0) {
+                list.innerHTML = '<li style="font-size: 12px; color: #888; text-align: center;">지도를 클릭하여 북마크를 추가하세요.</li>';
+                return;
+            }
+
+            bookmarks.forEach((bm, index) => {
+                const li = document.createElement('li');
+                li.className = 'bookmark-item';
+                li.innerHTML = `<span>🗺️ ${bm.name}</span> <span class="bookmark-del" title="삭제" onclick="deleteBookmark(${index})">✕</span>`;
+                list.appendChild(li);
+            });
+        }
+
+        function deleteBookmark(index) {
+            bookmarks.splice(index, 1);
+            renderBookmarks();
+        }
+
+        // 지도를 클릭했을 때 북마크 추가
+        map.on('click', function(e) {
+            const currentName = document.getElementById('countryName').innerText;
+            if (currentName === "바다 또는 미확인 지역" || currentName === "탐색 중...") return;
+            
+            if (bookmarks.length >= 10) {
+                alert("탐험 기록은 최대 10개까지만 저장할 수 있습니다!");
+                return;
+            }
+            
+            const isExist = bookmarks.some(bm => bm.name === currentName);
+            if(isExist) {
+                alert("이미 저장된 장소입니다.");
+                return;
+            }
+
+            bookmarks.push({ name: currentName });
+            renderBookmarks();
+        });
+
+        // 마우스 추적 및 정보 가져오기
+        let typingTimer;
+        let currentCountryCode = ""; 
+        let isModalOpen = false;
+        let currentCountryInfo = null;
+
+        map.on('mousemove', function(e) {
+            if (isModalOpen) return;
+
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
+
+            document.getElementById('latValue').innerText = lat.toFixed(4);
+            document.getElementById('lngValue').innerText = lng.toFixed(4);
+
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(() => { getCountryBasicInfo(lat, lng); }, 300);
+        });
+
+        async function getCountryBasicInfo(lat, lng) {
+            try {
+                // [특수 처리] 동해 및 독도 강제 인식 (위경도 범위 기준)
+                if (lat > 37.2 && lat < 37.3 && lng > 131.8 && lng < 131.9) {
+                    setManualInfo("대한민국 독도", "KR", "Asia");
+                    updateTime(lng);
+                    return;
+                }
+                if (lat > 36.0 && lat < 40.5 && lng > 130.0 && lng < 139.0) {
+                    const testGeo = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=ko`);
+                    const testData = await testGeo.json();
+                    if(!testData.countryName) { 
+                        setManualInfo("동해 (East Sea)", "", "");
+                        updateTime(lng);
+                        return;
+                    }
+                }
+
+                // 일반 지역 API 호출
+                const resGeo = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=ko`);
+                const dataGeo = await resGeo.json();
+                
+                if (!dataGeo.countryName || dataGeo.countryName === "") {
+                    resetMainPanel();
+                    return;
+                }
+                
+                document.getElementById('countryName').innerText = dataGeo.countryName;
+                currentCountryCode = dataGeo.countryCode; 
+
+                // 국가 상세 데이터 가져오기
+                if (currentCountryCode) {
+                    const resCountry = await fetch(`https://restcountries.com/v3.1/alpha/${currentCountryCode}`);
+                    if(resCountry.ok) {
+                        const dataCountry = await resCountry.json();
+                        currentCountryInfo = dataCountry[0]; 
+                        
+                        const flagImg = document.getElementById('mainFlag');
+                        flagImg.src = `https://flagcdn.com/w40/${currentCountryCode.toLowerCase()}.png`;
+                        flagImg.style.display = 'block';
+
+                        const continentBadge = document.getElementById('mainContinent');
+                        continentBadge.innerText = currentCountryInfo.region;
+                        continentBadge.style.display = 'inline-block';
+                    }
+                }
+                updateTime(lng);
+
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        function setManualInfo(name, code, continent) {
+            document.getElementById('countryName').innerText = name;
+            currentCountryCode = code;
+            
+            if (code === "KR") {
+                document.getElementById('mainFlag').src = "https://flagcdn.com/w40/kr.png";
+                document.getElementById('mainFlag').style.display = 'block';
+                document.getElementById('mainContinent').innerText = "Asia";
+                document.getElementById('mainContinent').style.display = 'inline-block';
+                fetch(`https://restcountries.com/v3.1/alpha/KR`)
+                    .then(r => r.json())
+                    .then(d => { currentCountryInfo = d[0]; });
+            } else {
+                document.getElementById('mainFlag').style.display = 'none';
+                document.getElementById('mainContinent').style.display = 'none';
+                currentCountryInfo = null;
+            }
+        }
+
+        function updateTime(lng) {
+            const offsetHours = Math.round(lng / 15);
+            const now = new Date();
+            const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const localDate = new Date(utc + (3600000 * offsetHours));
+            document.getElementById('localTime').innerText = localDate.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function resetMainPanel() {
+            document.getElementById('countryName').innerText = "바다 또는 미확인 지역";
+            document.getElementById('localTime').innerText = "--:--";
+            document.getElementById('mainFlag').style.display = 'none';
+            document.getElementById('mainContinent').style.display = 'none';
+            currentCountryCode = ""; 
+            currentCountryInfo = null;
+        }
+
+        // 'K' 상세 정보 팝업
+        function showDetail() {
+            const korName = document.getElementById('countryName').innerText;
+
+            if (korName === "동해 (East Sea)") {
+                alert("동해는 아름다운 대한민국의 바다입니다!");
+                return;
+            }
+
+            if (!currentCountryCode || !currentCountryInfo) {
+                alert("나라 위에 마우스를 올린 후 K를 눌러주세요!");
+                return;
+            }
+            if (isModalOpen) return;
+
+            document.getElementById('modalCountryName').innerText = korName;
+            document.getElementById('modalFlag').src = currentCountryInfo.flags.svg;
+            document.getElementById('modalCapital').innerText = currentCountryInfo.capital ? currentCountryInfo.capital[0] : "없음";
+            document.getElementById('modalRegion').innerText = currentCountryInfo.region;
+            document.getElementById('modalPopulation').innerText = currentCountryInfo.population.toLocaleString('ko-KR'); 
+
+            const langs = currentCountryInfo.languages;
+            document.getElementById('modalLang').innerText = langs ? Object.values(langs)[0] : "미확인";
+
+            const currencies = currentCountryInfo.currencies;
+            if (currencies) {
+                const currency = Object.values(currencies)[0];
+                document.getElementById('modalMoney').innerText = `${currency.name} (${currency.symbol})`;
+            } else {
+                document.getElementById('modalMoney').innerText = "미확인";
+            }
+
+            const lat = currentCountryInfo.latlng[0];
+            let climate = "";
+            if (Math.abs(lat) < 23.5) climate = "🌡️ 열대 기후 (더워요)";
+            else if (Math.abs(lat) < 40) climate = "☀️ 온대 기후 (따뜻해요)";
+            else if (Math.abs(lat) < 60) climate = "🍂 냉대 기후 (추워요)";
+            else climate = "❄️ 한대 기후 (아주 추워요)";
+            document.getElementById('modalClimate').innerText = climate;
+
+            const naverBtn = document.getElementById('naverBtn');
+            naverBtn.onclick = function() {
+                const searchKeyword = korName === "대한민국 독도" ? "독도" : korName;
+                const searchUrl = `https://terms.naver.com/search.naver?query=${searchKeyword}`;
+                window.open(searchUrl, '_blank');
+            }
+
+            document.getElementById('overlay').style.display = 'block';
+            document.getElementById('detailModal').style.display = 'block';
+            isModalOpen = true;
+        }
+
+        function closeDetail() {
+            document.getElementById('overlay').style.display = 'none';
+            document.getElementById('detailModal').style.display = 'none';
+            isModalOpen = false;
+        }
+
+        window.addEventListener('keydown', function(event) {
+            if (!isModalOpen && (event.key === 'k' || event.key === 'K' || event.key === 'ㅏ')) {
+                showDetail();
+            }
+            else if (isModalOpen && event.key === 'Escape') {
+                closeDetail();
+            }
+        });
+    </script>
+</body>
+</html>
